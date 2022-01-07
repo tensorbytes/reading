@@ -1,4 +1,8 @@
-Oracle并行SQL执行原理
+## Oracle并行SQL执行说明
+
+
+
+#### day1
 
 官方说明文档`https://docs.oracle.com/cd/E11882_01/server.112/e25523/parallel002.htm`
 
@@ -18,3 +22,22 @@ Oracle并行SQL执行原理
 - 哪条数据属于哪个并行任务的
 - 并行任务间的数据是怎么同步的
 
+
+
+#### day2
+
+已知执行并行SQL是通过多个Server进程实现，在官方文档的某小节中`How Parallel Execution Servers Communicate`中有一些描述
+
+<img src="Oracle/image-20220107170747814.png" alt="image-20220107170747814" style="zoom:50%;" />
+
+- 除了作为协调者的Server进程，其余Server进程还会分为producer Server 以及 consumer进程。producer Server对应图中server set1，其负责读取数据consumer server负责执行具体的数据处理（join 、sort 、dml、ddl等）
+
+- 每一个producer server会与每一个consumer server 建立一个connection, 如图中所示，形成一个笛卡尔积的效果。图中并没有将协调者 画出来，每一个parallel execution servers (   producer server  +   consumer server ) 都会与 协调者 建立一个virtual connection.（  这里写虚拟连接 估计是因为  在单实例情况下，server与server之间是基于 shared pool中的 buffer进行通信的）
+
+- 每一个connection 都会分配 1到4 个 buffer 用于通信， 单实例情况下 ，最多3个buffer；rac情况下，最多4个buffer.
+
+  
+
+- 
+
+ 
