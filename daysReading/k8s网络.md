@@ -87,3 +87,83 @@ ip link set veth1 netns netns1
 
 ## 1.3 bridge
 
+veth pair只能让两个namespace通信，多个namespace通信就不行了。需要使用bridge（网桥）。计算机网络课本上的网桥是一个两层的网络设备，利用ARP协议根据mac地址将数据包转发到连接到它身上的不同局域网，后来被三层的交换机淘汰了。
+
+Linux系统中的bridge的行为更像是一台虚拟的网络交换机，任意的真实物理设备（例如eth0）和虚拟设备（例如，veth pair、tap设备）都可以连接到Linux bridge上。连接到bridge的设备其mac地址以及ip地址就没有用了，因为这些设备被当成一个端口使用了，它们接受到的所有数据包都会交给bridge来处理。
+
+**网桥在虚拟机中的应用**
+
+<img src="k8s网络/image-20220111142204941.png" alt="image-20220111142204941" style="zoom:50%;" />
+
+
+
+图片取自《Kubernetes网络权威指南》。访问外网的时候，tun/tap会将虚拟机网卡eth0的数据包给到br0网桥，然后br0网桥会将包从eth0送出去，不经过宿主机的网络协议栈。
+
+
+
+**网桥在容器中的应用**
+
+<img src="k8s网络/image-20220111142708310.png" alt="image-20220111142708310" style="zoom:50%;" />
+
+图片取自《Kubernetes网络权威指南》。这里容器用的veth pair，数据包同样会给到br0，然后经由eth0送出去，不经过宿主机的网络协议栈。
+
+
+
+
+
+**混杂模式**
+
+IEEE 802定的网络规范中，每个网络帧都有一个目的MAC地址。在非混杂模式下，网卡只会接收目的MAC地址是它自己的单播帧，以及多播及广播帧；在混杂模式下，网卡会接收经过它的所有帧。
+
+```shell
+# 查看一个网卡是否开启了混杂模式,当输出包含 PROMISC 时，表明该网络接口处于混杂模式。
+ifconfig eth0
+
+# 开启混杂模式
+ifconfig eth0 promisc
+
+# 退出混杂模式
+ifconfig eth0 -promisc
+
+```
+
+将网络设备加入Linux bridge后，会自动进入混杂模式。
+
+
+
+
+
+
+
+网桥相关的一些命令：
+
+```shell
+# 创建网桥
+ip link add name br0 type bridge
+ip link set br0 up 
+
+# 将veth0 连接到br0上
+ip link set dev veth0 master br0
+
+# 查看网桥上有哪些设备
+bridge link
+```
+
+还可以使用brctl命令操作
+
+```shell
+# 安装相关rpm
+yum install bridge-utils
+
+# 创建网桥
+brctl addbr br0
+
+# 将veth0 连接到br0上
+brctl addif br0 veth0
+
+# 查看网桥上有哪些设备
+brctl show
+```
+
+
+
