@@ -63,6 +63,16 @@ sudo sysctl --system
 
 #### 1.3 安装docker
 
+安装前先卸载旧版本docker
+
+```shell
+yum remove docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine
+```
+
+
+
+
+
 阿里云的安装教程 https://developer.aliyun.com/mirror/docker-ce?spm=a2c6h.13651102.0.0.53322f70ave0cL
 
 ```shell
@@ -74,6 +84,9 @@ sudo yum-config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/ce
 sudo sed -i 's+download.docker.com+mirrors.aliyun.com/docker-ce+' /etc/yum.repos.d/docker-ce.repo
 # Step 4: 更新并安装Docker-CE
 sudo yum makecache fast
+# 查看docker版本
+yum list docker-ce --showduplicates | sort -r
+# 安装指定版本
 sudo yum -y install docker-ce
 # Step 4: 开启Docker服务
 sudo systemctl start docker
