@@ -69,10 +69,6 @@ sudo sysctl --system
 yum remove docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine
 ```
 
-
-
-
-
 阿里云的安装教程 https://developer.aliyun.com/mirror/docker-ce?spm=a2c6h.13651102.0.0.53322f70ave0cL
 
 ```shell
@@ -87,20 +83,12 @@ sudo yum makecache fast
 # 查看docker版本
 yum list docker-ce --showduplicates | sort -r
 # 安装指定版本
-sudo yum -y install docker-ce
+sudo yum -y install docker-ce-20.10.12-3.el7
 # Step 4: 开启Docker服务
 sudo systemctl start docker
+# 开机启动
+sudo systemctl enable docker
 ```
-
-
-
-如果有旧的docker，则需要删除
-
-
-
-
-
-
 
 修改默认镜像仓库地址,  获取路径  登录阿里云官网  -> 容器镜像服务 -> 镜像工具 
 
@@ -117,11 +105,7 @@ sudo systemctl daemon-reload
 sudo systemctl restart docker
 ```
 
-
-
-
-
-### 2、修改kubeadm的默认参数
+### 2、修改kubeadm的默认参数（可选）
 
 ```shell
 # 将默认参数保存到文件中
@@ -180,6 +164,7 @@ done
 
 ```sh
 docker tag k8s.gcr.io/coredns:v1.8.6 k8s.gcr.io/coredns/coredns:v1.8.6
+docker rmi k8s.gcr.io/coredns:v1.8.6
 ```
 
 打完tag后如下
@@ -198,7 +183,7 @@ k8s.gcr.io/pause                     3.6                 6270bb605e12        4 m
 
 
 
-### 4、使用kubeadm安装Master
+### 4、使用kubeadm安装Master/worker
 
 #### 4.1 初始化前预检查
 
@@ -219,7 +204,9 @@ kubernetes默认设置cgroup驱动为“systemd”，而docker服务的cgroup驱
 }
 ```
 
-修改完后重启docker服务的时候，报错了`specified both as a flag and in the configuration file: exec-opts`
+<font color="red">修改完后重启docker服务</font>，然后用docker info检查cgroupfs是否已经设置为`systemd`。
+
+如果报错了`specified both as a flag and in the configuration file: exec-opts`
 
 查看systemctl start docker对应的命令``
 
@@ -229,9 +216,9 @@ kubernetes默认设置cgroup驱动为“systemd”，而docker服务的cgroup驱
 
 #### 4.3  安装master
 
-```
+```shell
 # 安装master
-kubeadm init
+kubeadm init --pod-network-cidr=192.168.0.0/16
 ```
 
 如图所示即master安装成功
@@ -244,8 +231,6 @@ kubeadm join是将其他节点加入集群时使用的命令需要保存好。�
 # kubeadm token create --print-join-command
 ```
 
-
-
 master装好后，还需要配置kubectl访问k8s
 
 ```shell
@@ -253,7 +238,7 @@ master装好后，还需要配置kubectl访问k8s
 vim ~/.bashrc
 # 添加一下环境变量指定kubectl 连接集群时使用的配置文件
 export KUBECONFIG=/etc/kubernetes/admin.conf
-
+source ~/.bashrc
 
 # 非root用户
 mkdir -p $HOME/.kube
@@ -272,23 +257,46 @@ kube-proxy                           2      47h
 kube-root-ca.crt                     1      47h
 kubeadm-config                       1      47h
 kubelet-config-1.23                  1      47h
+
 ```
-
-
-
-
-
-
 
 #### 4.4 添加node
 
-将1~3小节的操作在新加的node上重复一遍
+<font color="red">将1~3小节的操作在新加的node上重复一遍</font>,然后执行kubeadm init 时最后输出的join命令
 
+```shell
+kubeadm join xxx.xx.xx.xx:6443 --token jbelvz.he84sqhp6gpo8twf --discovery-token-ca-cert-hash sha256:99f6e14d7a287ee05f369ea79090b57f7e5bf437ca2b8d0b43afc38a6b35c695
+```
 
+控制台输出以下内容，表示已经添加成功
 
+```shell
+This node has joined the cluster:
+* Certificate signing request was sent to apiserver and a response was received.
+* The Kubelet was informed of the new secure connection details.
 
+Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
+```
 
-### 5、删除master/worker
+用`kubectl get nodes`查看node的状态
+
+```
+[root@sz1 ~]# kubectl get nodes
+NAME   STATUS     ROLES                  AGE   VERSION
+sz1    NotReady   control-plane,master   9h    v1.23.1
+sz2    NotReady   <none>                 9h    v1.23.1
+```
+
+`NotReady`是因为还没有安装网络插件
+
+#### 4.5 设置master也参与POD的调度（可选）
+
+```sh
+# 这里我的sz1是master，如果是HA方案存在多个master则可以将 sz1  换成 --all
+kubectl taint nodes sz1 node-role.kubernetes.io/master-
+```
+
+#### 4.6、删除master/worker
 
 可以运行`kubeadm reset`命令将主机恢复原状，重新运行`kubeadm init`命令再次进行安装。下面是运行`kubeadm reset`的输出
 
@@ -317,7 +325,62 @@ The reset process does not clean your kubeconfig files and you must remove them 
 Please, check the contents of the $HOME/.kube/config file.
 ```
 
-从输出看，还是有一些手工工作要做的
+从输出看，还是有一些手工工作要做的, <font color="red">但是我没有删除,不知道会不会有什么问题，等发现了再补充吧</font>
+
+
+
+### 5、安装CNI网络插件
+
+`kubectl get nodes`显示节点状态NotReady是因为还没有安装CNI网络插件。对于CNI网络插件，可以有许多选择。例如选择Calico CNI插件。
+
+查看Calico官方安装文档`https://projectcalico.docs.tigera.io/getting-started/kubernetes/quickstart`安装步骤如下
+
+```shell
+# step 1 安装operator
+kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+
+# step 2 因为我们在上面执行kubeadm init的时候没有指定pod的IP地址范围...
+# google没找到解决办法，只用kubeadm reset，然后重新走一遍流程.  node节点也要kubeadm reset
+
+
+# 2.1 将calico的yaml文件保存到本地查看其pod的cidr是什么
+curl https://docs.projectcalico.org/manifests/custom-resources.yaml > calico.yaml
+# 输出 cidr: 192.168.0.0/16 与 kubeadm init时指定的ip范围一样即可
+cat calico.yaml | grep "cidr"
+
+# 2.2 创建pod
+kubectl apply -f calico.yaml
+```
+
+创建完成后，检查是否安装成功
+
+```shell
+kubectl get nodes -o wide
+```
+
+成功后node的状态会变成ready，还有一个
+
+![image-20220115161616570](k8s集群安装/image-20220115161616570.png)
+
+
+
+### 6、DashBoard
+
+略
+
+### 6、问题
+
+以上步骤创建的集群存在单点问题，如果master不能工作，用户无法管理在各Node上运行的Pod.且Master以不安全方式提供服务（没有启用基于CA认证的HTTPS安全机制）。要想解决单点问题，Master节点中运行着kube-apiserver、kube-controller-mansger、kube-scheduler、etcd这4个服务需要至少3个节点的多实例方式部署，大致如下：
+
+<img src="k8s集群安装/image-20220115163128561.png" alt="image-20220115163128561" style="zoom:67%;" />
+
+
+
+上图取自k8s官网。官网上有用kubeadm创建HA集群的教程. 不是运维，木有资源搭HA，有机会在研究吧。。
+
+`https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/ha-topology/`
+
+
 
 
 
