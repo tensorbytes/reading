@@ -63,23 +63,22 @@ Flink有3种部署模式和3种运行模式。部署方式分别是standalone、
 
 
 
-
-
-
-
 ## RPC实现
 
 要理解Flink的源码，需要了解flink各个进程之间是如何通讯的。flink的RPC与Spark相似，用netty仿制akka的api实现rpc的基础类，所有组件的通讯都是通过继承rpc的基础类来实现的。
+主要的几个基础类如下： RpcService、RpcGateWay、RpcEndPoint、RpcServer。
 
+***RpcGateWay以及RpcEndPoint***的关系可以从他们的类继承体系可以看出来。TaskExecutor是rpc中的被调用端，具体的逻辑实现方，是server端被调用方法具体实现；TaskExecutorGatewayDecoratorBase是请求发起方，是client端封装请求的实现；那么TaskExecutorGateway就相当于他们之间的通讯协议，也就是规定server以及client有哪些远程调用方法。
 
+<img src="flink源码学习/image-20220227114421582.png" alt="image-20220227114421582" style="zoom:80%;" />
 
-
+***RpcServer*** 、RpcService 需要了解一下akka框架后再补充
 
 
 
 ## Flink Job提交流程
 
-提交程序的主入口类是CLIFrontEnd。
+程序的主入口类是CLIFrontEnd.
 
 
 
