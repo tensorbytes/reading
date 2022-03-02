@@ -72,13 +72,11 @@ Flink有3种部署模式和3种运行模式。部署方式分别是standalone、
 
 <img src="flink源码学习/image-20220227114421582.png" alt="image-20220227114421582" style="zoom:80%;" />
 
-***RpcServer*** 、RpcService 需要了解一下akka框架后再补充
 
 
 
-## Flink Job提交流程
 
-程序的主入口类是CLIFrontEnd.
+<font color="red">***RpcServer*** 、RpcService 需要了解一下akka框架后再补充</font>
 
 
 
@@ -92,5 +90,31 @@ Flink有3种部署模式和3种运行模式。部署方式分别是standalone、
 
 
 
+## Flink Job提交流程（YarnSession模式）
 
+使用下面的命令会创建一个YarnSession集群
+
+```
+yarn-session.sh -d
+```
+
+查看脚本可以看到对应的入口类`FlinkYarnSessionCli`.在入口类中会创建`yarnClient`然后与Yarn交互创建AM。AM的入口类就是`YarnSessionClusterEntrypoint`。
+
+<img src="flink源码学习/image-20220301163050393.png" alt="image-20220301163050393" style="zoom:50%;" />
+
+`YarnSessionClusterEntrypoint` 启动会创建一个叫webMonitorEndpoint的组件，该类继承了`RestServerEndpoint`类。调用其start()方法会启动一个netty server用于处理各种HTTP请求，<font color="red">包括Job的提交</font>.  webMonitorEndpoint的实现类有两个，分别是`MiniDispatcherRestEndpoint `以及 `DispatcherRestEndpoint`，前者对应的是PerJob模式，后者对应的是Session模式。
+
+ `DispatcherRestEndpoint`重写了initializeHandlers方法，添加了JobSubmitHandler。JobSubmitHandler就是负责处理提交Job的请求的。<font color="red">webMonitorEndpoint启动时，会注册URL以及对应的handler，如图所示 /jobs，在后面看flink run命令提交job时也是这个 /jobs</font>
+
+<img src="flink源码学习/image-20220302110851700.png" alt="image-20220302110851700" style="zoom:67%;" />
+
+当我们用`flink run xxxx`提交flink程序的时候, 从flink.sh脚本可以看到入口类是`CliFrontend`。CliFrontend中会通过反射调用我们编写的main方法。
+
+<img src="flink源码学习/image-20220301174837337.png" alt="image-20220301174837337" style="zoom:50%;" />
+
+main方法中会调用env.execute()方法生成jobGraph，然后通过RestClusterClient （YarnSession模式是这个，其他的没看）将jar包还有jobGraph 发送给前面启动好的netty server处，而请求的地址就是 /jobs
+
+<img src="flink源码学习/image-20220302105935324.png" alt="image-20220302105935324" style="zoom: 50%;" />
+
+<img src="flink源码学习/image-20220302122944030.png" alt="image-20220302122944030" style="zoom:67%;" />
 
