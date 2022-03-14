@@ -329,15 +329,55 @@ Please, check the contents of the $HOME/.kube/config file.
 
 
 
+**装了网络插件后，会有一大堆的iptables链和规则，需要清理**
+
+```
+# 清空所有规则
+iptables -F 
+
+# 清空所有链表
+iptables -X
+
+iptables -Z （zero 将所有的chain的计数与流量统计都归零）
+```
+
+如果有安装了网络插件，也需要清理
+
+```shell
+rm -f /etc/cni/net.d/*
+```
+
+
+
+
+
 ### 5、安装CNI网络插件
 
-`kubectl get nodes`显示节点状态NotReady是因为还没有安装CNI网络插件。对于CNI网络插件，可以有许多选择。例如选择Calico CNI插件。
+`kubectl get nodes`显示节点状态NotReady是因为还没有安装CNI网络插件。对于CNI网络插件，可以有许多选择。建议刚开始用Fannel插件，因为相对简单些，等熟悉了之后再用Calico。
+
+
+
+**Fannel插件**
+
+参考github地址`https://github.com/flannel-io/flannel` 里面的Getting started on Kubernetes
+
+```shell
+wget https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+kubectl apply -f kube-flannel.yml
+```
+
+
+
+
+
+**Calico CNI插件**
 
 查看Calico官方安装文档`https://projectcalico.docs.tigera.io/getting-started/kubernetes/quickstart`安装步骤如下
 
 ```shell
 # step 1 安装operator
-kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+wget https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
+kubectl create -f tigera-operator.yaml
 
 # step 2 因为我们在上面执行kubeadm init的时候没有指定pod的IP地址范围...
 # google没找到解决办法，只用kubeadm reset，然后重新走一遍流程.  node节点也要kubeadm reset
@@ -370,7 +410,7 @@ kubectl get nodes -o wide
 
 ### 6、问题
 
-以上步骤创建的集群存在单点问题，如果master不能工作，用户无法管理在各Node上运行的Pod.且Master以不安全方式提供服务（没有启用基于CA认证的HTTPS安全机制）。要想解决单点问题，Master节点中运行着kube-apiserver、kube-controller-mansger、kube-scheduler、etcd这4个服务需要至少3个节点的多实例方式部署，大致如下：
+以上步骤创建的集群存在单点问题，如果master不能工作，用户无法管理在各Node上运行的Pod.且Master以不安全方式提供服务（没有启用基于CA认证的HTTPS安全机制）。要想解决单点问题，Master节点中运行着kube-apiserver、kube-controller-mansger、kube-scheduler、etcd这4个服务需要至少3个节点的多实例方式部署（最重要的是api server以及etcd ， kube-scheduler 、kube-controller-mansger这两个挂了重启便是了）。大致如下：
 
 <img src="k8s集群安装/image-20220115163128561.png" alt="image-20220115163128561" style="zoom:67%;" />
 
