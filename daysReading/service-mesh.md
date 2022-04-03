@@ -16,3 +16,7 @@ annotations:
 我们都知道在k8s集群中，一个带istio sidecar的pod要访问另一个service，需要 service 端口名称设置为"tcp-xxx","http-xxx"或"grpc-xxx"，因为 istio 如果没开启端口协议检查（生产环境不建议开启），会根据 k8s 的 service 的端口名称去识别对应端口是什么协议。
 
 也正因为 istio 的这个特性导致我们在给 service 的 port 设置 name 的时候要注意，如果为了偷懒设置为"tcp-xxx"会导致 istio将下游端口识别为tcp，从而使用 四层负载均衡策略来访问，如果业务时 grpc，那就可能导致下游负载不均衡。
+
+## 泳道
+
+利用 service mesh 构建“泳道”可以精准控制爆炸半径。泳道是一个和基线环境软隔离的环境，可以通过对服务打标签的方法，将不同版本功能的服务加入泳道中。构建泳道的核心是流量标识透传（traffic label passthrough）和落盘脏数据隔离。
