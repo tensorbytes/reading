@@ -1,28 +1,66 @@
-spark提交job会转换成0到多个ShuffleMapStage以及1个RsultStage，然后会再进一步转换成0到多个ShuffleMapTask以及1个ResultTask.
+## 什么是shuffle
 
-假设有2两个ShuffleMapTask以及一个ResultTask，它们的执行顺序如下：
+spark提交job会根据计算逻辑切分成多个ShuffleMapStage以及1个RsultStage。一个Stage最后会再进一步转换成一个Task集合。ShuffleMapStage转换成ShuffleMapTask集合，ResultStage会转换成ResultTask集合。
 
-ShuffleMapTask => ShuffleMapTask => ResultTask
+假设一个Spark应用有2两个ShuffleMapTask集合以及一个ResultTask集合，它们的执行顺序如下：
 
-第一个Task的输入来自于外部，如hdfs等。后一个Task的输入是上一个Task的输出。两个task之间的数据传输就是常说的shuffle。
+ShuffleMapTask集合1 => ShuffleMapTask集合2 => ResultTask集合
+
+第一个集合ShuffleMapTask的输入来自于外部，如hdfs等，第二ShuffleMapTask集合的输入是上一个Task集合的输出。两个ShuffleMapTask集合之间的数据传输就是我们常说的shuffle，当然ShuffleMapTask集合与ResultTask集合之间的数据传输也是shuffle.
+
+之前有个朋友问我，假设ShuffleMapTask集合2与它的的输入来源ShuffleMapTask集合1都在同一个节点上，没有发生跨节点传输数据，那这个数据传输的过程还算shuffle吗？我个人理解是task是否在不同的节点上并不是定义shuffle的必要条件，shuffle本质是两个无法合并两个stage之间的数据传输，全部在一个节点上是任务调度的关系，是shuffle中特殊的情况。
+
+## shuffle的流程（待补充）
+
+那么一个shuffle流程的流程是怎样的呢？为了方便描述，将前后两个ShuffleMapTask用MapReduce中的task类型类描述。前者称为MapTask，后者称为ReduceTask.  无论是Spark还是MapReduce计算框架，都是用了迭代器的方式去触发计算的。
+
+1、MapTask逐行输出计算结果
+
+2、计算结果写入缓存
+
+3、缓存达到阈值，溢写磁盘形成一个小文件
+
+4、重复1-3步骤，直到MapTask输出了全部计算结果，得到一堆小文件
+
+5、利用归并排序算法对小文件进行合并，形成一个以分区id、分区key值排序的大文件
 
 
 
-那么一个shuffle流程的流程是怎样的呢？为了方便描述，将前后两个ShuffleMapTask用MapReduce中的task类型类描述。前者作为后者输入，
 
-前者称为MapTask，后者称为ReduceTask.
 
-1、MapTask对数据进行加工
 
-2、MapTask加工的结果，分多个文件写入磁盘
 
-3、对文件进行排序合并
+Spark内部把shuffl相关的功能抽象为writer以及reader，executor在执行task的时候，用writer输出数据，用reader读取数据。其底层实现被封装了起来。
 
-4、
+这个writer以及reader是通过一个叫ShuffleManager获取的。ShuffleManager实现最初叫HashShuffleManager，后来被SortShuffleManager替代了。HashShuffleManager有两个阶段，分别是优化前，优化后两个阶段。优化前产生的文件数为 map任务数 * reduce任务数个临时文件，优化后为executor 个数 * reduce任务数。<font color="red">SortShuffleManager顾名思义，增加了排序的逻辑，在map端溢写时排序，合并成大文件时会排序,reduce端拉取数据也会排序？？？要确认</font>
 
 
 
 
 
-Spark程序优化的一个核心思路是减少shuffle的次数。因为shuffle伴随着数据写盘、跨节点传输数据、排序等性能消耗较大的环节。只有分布式计算中有聚合的逻辑，shuffle就无法避免。因此优化的另一个思路是尽量减少shuffle的数据量。
+shuffle过程中，当map task输出数据满足以下条件时，会溢写到磁盘中：
+
+（1）buffer或者map无法扩容时
+
+（2）buffer或者map中的记录数达到阈值时，默认阈值为Integer.Max_value,即2的31次方。该值可以通过配置项修改
+
+
+
+在sortShuffleWriter中可以看到map端的数据一定会落盘。
+
+
+
+在spark 2.x中，map与reduce之间连接都是 all to all的，在spark 3.x中增加了 external shuffle service实现，优化了shuffle。
+
+
+
+
+
+
+
+
+
+
+
+
 
