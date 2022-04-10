@@ -1,6 +1,6 @@
 # RocksDB
 
-RocksDB 源于 levelDB，是基于 LSM 树(Log structured model tree)构造的存储引擎。
+RocksDB 源于 levelDB，是基于 LSM 树(Log structured merge tree)构造的存储引擎。
 
 核心：相对于B+树的针对读优化，LSM 是一个写优化的算法。
 
