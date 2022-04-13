@@ -26,13 +26,28 @@ ShuffleMapTask集合1 => ShuffleMapTask集合2 => ResultTask集合
 
 
 
-
-
-
-
 Spark内部把shuffl相关的功能抽象为writer以及reader，executor在执行task的时候，用writer输出数据，用reader读取数据。其底层实现被封装了起来。
 
-这个writer以及reader是通过一个叫ShuffleManager获取的。ShuffleManager实现最初叫HashShuffleManager，后来被SortShuffleManager替代了。HashShuffleManager有两个阶段，分别是优化前，优化后两个阶段。优化前产生的文件数为 map任务数 * reduce任务数个临时文件，优化后为executor 个数 * reduce任务数。<font color="red">SortShuffleManager顾名思义，增加了排序的逻辑，在map端溢写时排序，合并成大文件时会排序,reduce端拉取数据也会排序？？？要确认</font>
+这个writer以及reader是通过一个叫ShuffleManager获取的。ShuffleManager实现最初叫HashShuffleManager，后来被SortShuffleManager替代了。HashShuffleManager有两个阶段，分别是优化前，优化后两个阶段。优化前产生的文件数为 map任务数 * reduce任务数个临时文件，优化后为executor 个数 * reduce任务数。<font color="red">SortShuffleManager顾名思义，增加了排序的逻辑，在map端溢写时排序，合并成大文件时会排序,reduce端拉取数据的时候与map端使用同一个数据结构ExternalSorter，因此也会有溢写磁盘以及排序的逻辑。</font>
+
+reader封装了从拉取数据的逻辑，reduce任务只需要考虑对数据集中每条数据如何处理即可。Spark用迭代器来表示一个数据集，reduce任务的实现就是通过遍历迭代器获取每一条记录，然后对记录进行处理。简化后的代码效果大致如下：
+
+```
+iterator = rdd.iteator(partitionId)
+While iterator.hasNext():
+    record = iterator.next()
+    process(record)
+```
+
+process就是我们编写的业务逻辑处理函数，从不同的executor上拉取map任务输出的中间结果、然后排序合并等等的逻辑都隐藏在 迭代器的  next方法中。
+
+
+
+reader在读取数据的时候，需要知道自己需要取的数据落在哪个executor上，因此会先通过MapOutPutTrackerWorker发送rpc请求给到 Driver中的MapOutPutTrackerMaster获取MapStatus对象。 MapStatus对象记录了Map任务的状态信息，这些信息包含了 数据存储所在的executor id，数据文件中各个partition的偏移量。
+
+
+
+
 
 
 
